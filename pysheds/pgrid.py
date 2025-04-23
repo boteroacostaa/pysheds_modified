@@ -155,7 +155,7 @@ class Grid(object):
                 mask = data.mask
         else:
             if mask is None:
-                mask = np.ones(shape, dtype=np.bool)
+                mask = np.ones(shape, dtype=bool)
             if shape is None:
                 shape = data.shape
         if not isinstance(data, np.ndarray):
@@ -1613,7 +1613,8 @@ class Grid(object):
                 nodata_cells = (fdir == nodata_in)
         try:
             mintype = np.min_scalar_type(fdir.size)
-            fdir = fdir.astype(mintype)
+            #ABA next line commented
+            #fdir = fdir.astype(mintype)
             domain = domain.astype(mintype)
             startnodes, endnodes = self._construct_matching(fdir, domain,
                                                             dirmap=dirmap)
@@ -2296,8 +2297,15 @@ class Grid(object):
             )
         gotomap = dict(zip(dirmap, go_to))
         for k, v in gotomap.items():
-            fdir[fdir == k] = v
+            #ABA edited start
+            fdir[fdir == k] = np.array(v).astype(int)
+            #ABA edi end
+            #fdir[fdir == k] = v
         fdir.flat[flat_idx] += flat_idx
+        #ABA added for first and last rows
+        fdir[fdir < 0] = fdir[fdir < 0]+shape[1]
+        fdir[fdir > flat_idx.size-1] = fdir[fdir > flat_idx.size-1]-shape[1]-1
+        #ABA added ended
 
     def _unflatten_fdir(self, fdir, flat_idx, dirmap):
         shape = fdir.shape
@@ -2314,7 +2322,10 @@ class Grid(object):
         gotomap = dict(zip(go_to, dirmap))
         fdir.flat[flat_idx] -= flat_idx
         for k, v in gotomap.items():
-            fdir[fdir == k] = v
+            #Aba edit started
+            fdir[fdir == k] = np.array(v).astype(int)
+            #ABA edit ended
+            #fdir[fdir == k] = v
 
     def _construct_matching(self, fdir, flat_idx, dirmap, fdir_flattened=False):
         # TODO: Maybe fdir should be flattened outside this function
