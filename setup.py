@@ -4,7 +4,7 @@ from setuptools import setup
 
 setup(
     name="pysheds_modified",
-    version="ABA-0.3.5",
+    version="0.3.5+aba",
     description="🌎 Simple and fast watershed delineation in python.",
     long_description="🌎 Simple and fast watershed delineation in python.",
     long_description_content_type="text/x-rst",
