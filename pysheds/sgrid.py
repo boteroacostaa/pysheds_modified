@@ -5,6 +5,10 @@ import copy
 import numpy as np
 import pandas as pd
 import geojson
+#ABA added from old version pgrid.py
+import scipy.sparse
+from scipy.sparse import csgraph
+#ABA end edit
 from affine import Affine
 try:
     import skimage.measure
@@ -1165,7 +1169,149 @@ class sGrid():
         dist = self._output_handler(data=dist, viewfinder=fdir.viewfinder,
                                    metadata=fdir.metadata, nodata=nodata_out)
         return dist
+    #ABA added from old version pgrid.py
+    def _d8_flow_distance_ABA(self, x, y, fdir, weights=None, dirmap=None, nodata_in=None,
+                          nodata_out=0, out_name='dist', method='shortest', inplace=True,
+                          xytype='index', apply_mask=True, ignore_metadata=False, properties={},
+                          metadata={}, snap='corner', **kwargs):
+        # Construct flat index onto flow direction array
+        domain = np.arange(fdir.size)
+        fdir_orig_type = fdir.dtype
+        if nodata_in is None:
+            nodata_cells = np.zeros_like(fdir).astype(bool)
+        else:
+            if np.isnan(nodata_in):
+                nodata_cells = (np.isnan(fdir))
+            else:
+                nodata_cells = (fdir == nodata_in)
+        try:
+            mintype = np.min_scalar_type(fdir.size)
+            #ABA next line commented
+            #fdir = fdir.astype(mintype)
+            domain = domain.astype(mintype)
+            startnodes, endnodes = self._construct_matching_ABA(fdir, domain,
+                                                            dirmap=dirmap)
+            if xytype == 'label':
+                x, y = self.nearest_cell_ABA(x, y, fdir.affine, snap)
+            # TODO: Currently the size of weights is hard to understand
+            if weights is not None:
+                weights = weights.ravel()
+                assert(weights.size == startnodes.size)
+                assert(weights.size == endnodes.size)
+            else:
+                assert(startnodes.size == endnodes.size)
+                weights = (~nodata_cells).ravel().astype(int)
+            C = scipy.sparse.lil_matrix((fdir.size, fdir.size))
+            for i,j,w in zip(startnodes, endnodes, weights):
+                C[i,j] = w
+            C = C.tocsr()
+            xyindex = np.ravel_multi_index((y, x), fdir.shape)
+            dist = csgraph.shortest_path(C, indices=[xyindex], directed=False)
+            dist[~np.isfinite(dist)] = nodata_out
+            dist = dist.ravel()
+            dist = dist.reshape(fdir.shape)
+        except:
+            raise
+        finally:
+            self._unflatten_fdir_ABA(fdir, domain, dirmap)
+            fdir = fdir.astype(fdir_orig_type)
+        # Prepare output
+        return self._output_handler(data=dist, viewfinder=fdir.viewfinder,
+                                    metadata=fdir.metadata, nodata=nodata_out)
+    
+    
+    def nearest_cell_ABA(self, x, y, affine=None, snap='corner'):
+        """
+        Returns the index of the cell (column, row) closest
+        to a given geographical coordinate.
+ 
+        Parameters
+        ----------
+        x : int or float
+            x coordinate.
+        y : int or float
+            y coordinate.
+        affine : affine.Affine
+                 Affine transformation that defines the translation between
+                 geographic x/y coordinate and array row/column coordinate.
+                 Defaults to self.affine.
+        snap : str
+               Indicates the cell indexing method. If "corner", will resolve to 
+               snapping the (x,y) geometry to the index of the nearest top-left 
+               cell corner. If "center", will return the index of the cell that 
+               the geometry falls within.
+        Returns
+        -------
+        x_i, y_i : tuple of ints
+                   Column index and row index
+        """
+        if not affine:
+            affine = self.affine
+        try:
+            assert isinstance(affine, Affine)
+        except:
+            raise TypeError('affine must be an Affine instance.')
+        snap_dict = {'corner': np.around, 'center': np.floor}
+        col, row = snap_dict[snap](~affine * (x, y)).astype(int)
+        return col, row
+    
+    def _flatten_fdir_ABA(self, fdir, flat_idx, dirmap, copy=False):
+        # WARNING: This modifies fdir in place if copy is set to False!
+        if copy:
+            fdir = fdir.copy()
+        shape = fdir.shape
+        go_to = (
+             0 - shape[1],
+             1 - shape[1],
+             1 + 0,
+             1 + shape[1],
+             0 + shape[1],
+            -1 + shape[1],
+            -1 + 0,
+            -1 - shape[1]
+            )
+        gotomap = dict(zip(dirmap, go_to))
+        for k, v in gotomap.items():
+            #ABA edited start
+            fdir[fdir == k] = np.array(v).astype(int)
+            #ABA edi end
+            #fdir[fdir == k] = v
+        fdir.flat[flat_idx] += flat_idx
+        #ABA added for first and last rows
+        fdir[fdir < 0] = fdir[fdir < 0]+shape[1]
+        fdir[fdir > flat_idx.size-1] = fdir[fdir > flat_idx.size-1]-shape[1]-1
+        #ABA added ended
 
+    def _unflatten_fdir_ABA(self, fdir, flat_idx, dirmap):
+        shape = fdir.shape
+        go_to = (
+             0 - shape[1],
+             1 - shape[1],
+             1 + 0,
+             1 + shape[1],
+             0 + shape[1],
+            -1 + shape[1],
+            -1 + 0,
+            -1 - shape[1]
+            )
+        gotomap = dict(zip(go_to, dirmap))
+        fdir.flat[flat_idx] -= flat_idx
+        for k, v in gotomap.items():
+            #Aba edit started
+            fdir[fdir == k] = np.array(v).astype(int)
+            #ABA edit ended
+            #fdir[fdir == k] = v
+            
+            
+    def _construct_matching_ABA(self, fdir, flat_idx, dirmap, fdir_flattened=False):
+        # TODO: Maybe fdir should be flattened outside this function
+        if not fdir_flattened:
+            self._flatten_fdir_ABA(fdir, flat_idx, dirmap)
+        startnodes = flat_idx
+        endnodes = fdir.flat[flat_idx]
+        return startnodes, endnodes
+    
+    #ABA end edit
     def _dinf_flow_distance(self, x, y, fdir, weights=None, dirmap=(64, 128, 1, 2, 4, 8, 16, 32),
                             nodata_out=np.nan, method='shortest', xytype='coordinate',
                             snap='corner', algorithm='iterative', **kwargs):
