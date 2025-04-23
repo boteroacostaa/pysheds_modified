@@ -3,15 +3,15 @@
 from setuptools import setup
 
 setup(
-    name="pysheds",
-    version="0.3.5",
+    name="pysheds_modified",
+    version="ABA-0.3.5",
     description="🌎 Simple and fast watershed delineation in python.",
     long_description="🌎 Simple and fast watershed delineation in python.",
     long_description_content_type="text/x-rst",
-    author="Matt Bartos",
+    author="Matt Bartos ABA modified",
     author_email="mdbartos@umich.edu",
     url="http://open-storm.org",
-    packages=["pysheds"],
+    packages=["pysheds_modified"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
